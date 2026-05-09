@@ -653,6 +653,22 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             : onFloatingWindowChanged));
 
     enhancementsTiles.add(_getPopupDialogRadioEntry(
+      title: 'Voice input mode',
+      list: [
+        _RadioEntry('Push-to-talk', kVoiceInputModePtt),
+        _RadioEntry('Toggle', kVoiceInputModeToggle),
+      ],
+      getter: () {
+        final v = bind.mainGetLocalOption(key: kOptionVoiceInputMode);
+        return v.isEmpty ? kVoiceInputModePtt : v;
+      },
+      asyncSetter: (value) async {
+        await bind.mainSetLocalOption(
+            key: kOptionVoiceInputMode, value: value);
+      },
+    ));
+
+    enhancementsTiles.add(_getPopupDialogRadioEntry(
       title: 'Keep screen on',
       list: [
         _RadioEntry('Never', _keepScreenOnToOption(KeepScreenOn.never)),

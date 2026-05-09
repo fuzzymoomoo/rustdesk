@@ -14,6 +14,7 @@ import 'package:flutter_keyboard_visibility/flutter_keyboard_visibility.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../../common.dart';
 import '../../common/widgets/overlay.dart';
@@ -81,6 +82,60 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   InputModel get inputModel => gFFI.inputModel;
   SessionID get sessionId => gFFI.sessionId;
 
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  final RxBool _voiceListening = false.obs;
+  bool _voiceInitialized = false;
+
+  String _voiceMode() {
+    final v = bind.mainGetLocalOption(key: kOptionVoiceInputMode);
+    return v.isEmpty ? kVoiceInputModePtt : v;
+  }
+
+  Future<void> _ensureVoiceReady() async {
+    if (_voiceInitialized) return;
+    _voiceInitialized = await _speech.initialize(
+      onStatus: (s) {
+        if (s == 'notListening' || s == 'done') _voiceListening.value = false;
+      },
+      onError: (_) => _voiceListening.value = false,
+    );
+    if (!_voiceInitialized) {
+      showToast(translate('Voice input unavailable'));
+    }
+  }
+
+  Future<void> _startVoice() async {
+    await _ensureVoiceReady();
+    if (!_voiceInitialized || _voiceListening.value) return;
+    _voiceListening.value = true;
+    await _speech.listen(
+      onResult: (r) {
+        if (r.finalResult && r.recognizedWords.isNotEmpty) {
+          bind.sessionInputString(
+              sessionId: sessionId, value: r.recognizedWords);
+        }
+      },
+      listenMode: stt.ListenMode.dictation,
+      partialResults: false,
+    );
+  }
+
+  Future<void> _stopVoice() async {
+    if (!_voiceListening.value) return;
+    await _speech.stop();
+    _voiceListening.value = false;
+  }
+
+  Future<void> _toggleVoiceMode() async {
+    final next = _voiceMode() == kVoiceInputModePtt
+        ? kVoiceInputModeToggle
+        : kVoiceInputModePtt;
+    await bind.mainSetLocalOption(key: kOptionVoiceInputMode, value: next);
+    showToast(translate('Voice input mode') +
+        ': ' +
+        (next == kVoiceInputModePtt ? 'Push-to-talk' : 'Toggle'));
+  }
+
   final TextEditingController _textController =
       TextEditingController(text: initText);
 
@@ -129,6 +184,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   @override
   Future<void> dispose() async {
     WidgetsBinding.instance.removeObserver(this);
+    if (_voiceListening.value) {
+      await _speech.stop();
+    }
+    await _speech.cancel();
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     gFFI.dialogManager.hideMobileActionsOverlay(store: false);
@@ -539,6 +598,63 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                     () => _showGestureHelp = !_showGestureHelp),
                               ),
                             ]) +
+                  (isWebDesktop || ffiModel.viewOnly || !ffiModel.keyboard
+                      ? <Widget>[]
+                      : <Widget>[
+                          IconButton(
+                            color: Colors.white,
+                            icon: Icon(Icons.looks_one),
+                            tooltip: 'Send "1"',
+                            onPressed: () => bind.sessionInputString(
+                                sessionId: sessionId, value: '1'),
+                          ),
+                          IconButton(
+                            color: Colors.white,
+                            icon: Icon(Icons.looks_two),
+                            tooltip: 'Send "2"',
+                            onPressed: () => bind.sessionInputString(
+                                sessionId: sessionId, value: '2'),
+                          ),
+                          IconButton(
+                            color: Colors.white,
+                            icon: Icon(Icons.keyboard_return),
+                            tooltip: 'Enter',
+                            onPressed: () => inputModel.inputKey('VK_ENTER'),
+                          ),
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onLongPressStart: (_) {
+                              if (_voiceMode() == kVoiceInputModePtt) {
+                                _startVoice();
+                              }
+                            },
+                            onLongPressEnd: (_) {
+                              if (_voiceMode() == kVoiceInputModePtt) {
+                                _stopVoice();
+                              }
+                            },
+                            onTap: () {
+                              if (_voiceMode() == kVoiceInputModeToggle) {
+                                _voiceListening.value
+                                    ? _stopVoice()
+                                    : _startVoice();
+                              }
+                            },
+                            onDoubleTap: _toggleVoiceMode,
+                            child: Obx(() => Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 12),
+                                  child: Icon(
+                                    _voiceListening.value
+                                        ? Icons.mic
+                                        : Icons.mic_none,
+                                    color: _voiceListening.value
+                                        ? Colors.redAccent
+                                        : Colors.white,
+                                  ),
+                                )),
+                          ),
+                        ]) +
                   (isWeb
                       ? []
                       : <Widget>[
