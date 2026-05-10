@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/mobile/widgets/cockpit_substrate.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse_widgets.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
@@ -443,6 +444,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         return false;
       },
       child: Scaffold(
+          appBar: const PreferredSize(
+            preferredSize: Size.fromHeight(36),
+            child: CockpitModeBar(),
+          ),
           // workaround for https://github.com/rustdesk/rustdesk/issues/3131
           floatingActionButtonLocation: keyboardIsVisible
               ? FABLocation(FloatingActionButtonLocation.endFloat, 0, -35)
@@ -488,40 +493,43 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                       : Offstage(),
                 ],
               )),
-          body: Obx(
-            () => getRawPointerAndKeyBody(Overlay(
-              initialEntries: [
-                OverlayEntry(builder: (context) {
-                  return Container(
-                    color: kColorCanvas,
-                    child: isWebDesktop
-                        ? getBodyForDesktopWithListener()
-                        : SafeArea(
-                            child:
-                                OrientationBuilder(builder: (ctx, orientation) {
-                              if (_currentOrientation != orientation) {
-                                Timer(const Duration(milliseconds: 200), () {
-                                  gFFI.dialogManager
-                                      .resetMobileActionsOverlay(ffi: gFFI);
-                                  _currentOrientation = orientation;
-                                  gFFI.canvasModel.updateViewStyle();
-                                });
-                              }
-                              return Container(
-                                color: MyTheme.canvasColor,
-                                child: inputModel.isPhysicalMouse.value
-                                    ? getBodyForMobile()
-                                    : RawTouchGestureDetectorRegion(
-                                        child: getBodyForMobile(),
-                                        ffi: gFFI,
-                                      ),
-                              );
-                            }),
-                          ),
-                  );
-                })
-              ],
-            )),
+          body: CockpitLayoutSwitcher(
+            sessionId: sessionId,
+            rdBody: Obx(
+              () => getRawPointerAndKeyBody(Overlay(
+                initialEntries: [
+                  OverlayEntry(builder: (context) {
+                    return Container(
+                      color: kColorCanvas,
+                      child: isWebDesktop
+                          ? getBodyForDesktopWithListener()
+                          : SafeArea(
+                              child: OrientationBuilder(
+                                  builder: (ctx, orientation) {
+                                if (_currentOrientation != orientation) {
+                                  Timer(const Duration(milliseconds: 200), () {
+                                    gFFI.dialogManager
+                                        .resetMobileActionsOverlay(ffi: gFFI);
+                                    _currentOrientation = orientation;
+                                    gFFI.canvasModel.updateViewStyle();
+                                  });
+                                }
+                                return Container(
+                                  color: MyTheme.canvasColor,
+                                  child: inputModel.isPhysicalMouse.value
+                                      ? getBodyForMobile()
+                                      : RawTouchGestureDetectorRegion(
+                                          child: getBodyForMobile(),
+                                          ffi: gFFI,
+                                        ),
+                                );
+                              }),
+                            ),
+                    );
+                  })
+                ],
+              )),
+            ),
           )),
     );
   }
