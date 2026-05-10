@@ -111,6 +111,7 @@ dependencies:
   google_fonts: ^6.2.1
   vector_math: ^2.1.4
   speech_to_text: ^6.6.0
+  record: ^4.4.4
 
 dev_dependencies:
   icons_launcher: ^2.0.4

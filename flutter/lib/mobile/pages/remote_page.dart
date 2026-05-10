@@ -7,6 +7,7 @@ import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/mobile/widgets/cockpit_substrate.dart';
+import 'package:flutter_hbb/mobile/widgets/voice_input.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse_widgets.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
@@ -106,8 +107,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   Future<void> _startVoice() async {
+    if (_voiceListening.value) return;
+    if (currentVoiceProvider() == kVoiceProviderTailnet) {
+      final path = await TailnetVoice.startRecording();
+      if (path != null) _voiceListening.value = true;
+      return;
+    }
     await _ensureVoiceReady();
-    if (!_voiceInitialized || _voiceListening.value) return;
+    if (!_voiceInitialized) return;
     _voiceListening.value = true;
     await _speech.listen(
       onResult: (r) {
@@ -123,6 +130,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   Future<void> _stopVoice() async {
     if (!_voiceListening.value) return;
+    if (currentVoiceProvider() == kVoiceProviderTailnet) {
+      final text = await TailnetVoice.stopAndTranscribe();
+      _voiceListening.value = false;
+      if (text != null && text.isNotEmpty) {
+        bind.sessionInputString(sessionId: sessionId, value: text);
+      }
+      return;
+    }
     await _speech.stop();
     _voiceListening.value = false;
   }
@@ -189,6 +204,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       await _speech.stop();
     }
     await _speech.cancel();
+    await TailnetVoice.cancel();
     // https://github.com/flutter/flutter/issues/64935
     super.dispose();
     gFFI.dialogManager.hideMobileActionsOverlay(store: false);

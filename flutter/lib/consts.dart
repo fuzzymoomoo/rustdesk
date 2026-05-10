@@ -137,6 +137,22 @@ const String kOptionTouchMode = "touch-mode";
 const String kOptionVoiceInputMode = "voice-input-mode";
 const String kVoiceInputModePtt = "ptt";
 const String kVoiceInputModeToggle = "toggle";
+const String kOptionVoiceInputProvider = "voice-input-provider";
+const String kVoiceProviderAndroid = "android";
+const String kVoiceProviderTailnet = "tailnet";
+const String kOptionVoiceInputUrl = "voice-input-url";
+const String kOptionVoiceInputToken = "voice-input-token";
+const String kOptionTtsUrl = "tts-url";
+const String kOptionTtsPlayback = "tts-playback";
+const String kTtsPlaybackServer = "server";
+const String kTtsPlaybackTablet = "tablet";
+const String kTtsPlaybackBoth = "both";
+// Defaults for Warrick's tailnet voice services. Both endpoints are
+// auth-less — Tailscale ACLs are the trust boundary.
+const String kDefaultSttUrl =
+    "http://fuzzyone.tail4b6af9.ts.net:9000/v1/audio/transcriptions";
+const String kDefaultTtsUrl =
+    "http://fuzzyone.tail4b6af9.ts.net:9100/speak";
 const String kOptionI444 = "i444";
 const String kOptionSwapLeftRightMouse = "swap-left-right-mouse";
 const String kOptionCodecPreference = "codec-preference";

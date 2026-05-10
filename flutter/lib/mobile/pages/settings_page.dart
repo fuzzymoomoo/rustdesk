@@ -669,6 +669,151 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     ));
 
     enhancementsTiles.add(_getPopupDialogRadioEntry(
+      title: 'Voice input provider',
+      list: [
+        _RadioEntry('Android (built-in)', kVoiceProviderAndroid),
+        _RadioEntry('Tailnet (remote Whisper)', kVoiceProviderTailnet),
+      ],
+      getter: () {
+        final v = bind.mainGetLocalOption(key: kOptionVoiceInputProvider);
+        return v.isEmpty ? kVoiceProviderAndroid : v;
+      },
+      asyncSetter: (value) async {
+        await bind.mainSetLocalOption(
+            key: kOptionVoiceInputProvider, value: value);
+      },
+    ));
+
+    enhancementsTiles.add(SettingsTile(
+      title: Text(translate('Voice service URL')),
+      leading: const Icon(Icons.cloud),
+      onPressed: (context) {
+        final ctrl = TextEditingController(
+          text: bind.mainGetLocalOption(key: kOptionVoiceInputUrl),
+        );
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(translate('Voice service URL')),
+            content: TextField(
+              controller: ctrl,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: kDefaultSttUrl,
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(translate('Cancel')),
+              ),
+              TextButton(
+                onPressed: () async {
+                  await bind.mainSetLocalOption(
+                      key: kOptionVoiceInputUrl, value: ctrl.text.trim());
+                  Navigator.of(ctx).pop();
+                },
+                child: Text(translate('OK')),
+              ),
+            ],
+          ),
+        );
+      },
+    ));
+
+    enhancementsTiles.add(SettingsTile(
+      title: Text(translate('Voice service token')),
+      leading: const Icon(Icons.vpn_key),
+      onPressed: (context) {
+        final ctrl = TextEditingController(
+          text: bind.mainGetLocalOption(key: kOptionVoiceInputToken),
+        );
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(translate('Voice service token')),
+            content: TextField(
+              controller: ctrl,
+              autofocus: true,
+              obscureText: true,
+              decoration: const InputDecoration(
+                hintText: 'Optional bearer token (shared with TTS)',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(translate('Cancel')),
+              ),
+              TextButton(
+                onPressed: () async {
+                  await bind.mainSetLocalOption(
+                      key: kOptionVoiceInputToken, value: ctrl.text.trim());
+                  Navigator.of(ctx).pop();
+                },
+                child: Text(translate('OK')),
+              ),
+            ],
+          ),
+        );
+      },
+    ));
+
+    enhancementsTiles.add(SettingsTile(
+      title: Text(translate('TTS service URL')),
+      leading: const Icon(Icons.record_voice_over),
+      onPressed: (context) {
+        final ctrl = TextEditingController(
+          text: bind.mainGetLocalOption(key: kOptionTtsUrl),
+        );
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(translate('TTS service URL')),
+            content: TextField(
+              controller: ctrl,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: kDefaultTtsUrl,
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(translate('Cancel')),
+              ),
+              TextButton(
+                onPressed: () async {
+                  await bind.mainSetLocalOption(
+                      key: kOptionTtsUrl, value: ctrl.text.trim());
+                  Navigator.of(ctx).pop();
+                },
+                child: Text(translate('OK')),
+              ),
+            ],
+          ),
+        );
+      },
+    ));
+
+    enhancementsTiles.add(_getPopupDialogRadioEntry(
+      title: 'TTS playback',
+      list: [
+        _RadioEntry('Play at server', kTtsPlaybackServer),
+        _RadioEntry('Play on tablet', kTtsPlaybackTablet),
+        _RadioEntry('Both ends', kTtsPlaybackBoth),
+      ],
+      getter: () {
+        final v = bind.mainGetLocalOption(key: kOptionTtsPlayback);
+        return v.isEmpty ? kTtsPlaybackServer : v;
+      },
+      asyncSetter: (value) async {
+        await bind.mainSetLocalOption(
+            key: kOptionTtsPlayback, value: value);
+      },
+    ));
+
+    enhancementsTiles.add(_getPopupDialogRadioEntry(
       title: 'Keep screen on',
       list: [
         _RadioEntry('Never', _keepScreenOnToOption(KeepScreenOn.never)),

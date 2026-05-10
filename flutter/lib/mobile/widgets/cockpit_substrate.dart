@@ -22,8 +22,10 @@ import 'package:get/get.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../../common.dart';
+import '../../consts.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import 'voice_input.dart';
 
 enum CockpitLayout { fullRD, cockpit, split }
 
@@ -187,8 +189,16 @@ class _DictationPanelState extends State<DictationPanel> {
   @override
   void dispose() {
     _speech.cancel();
+    TailnetVoice.cancel();
     _ctrl.dispose();
     super.dispose();
+  }
+
+  void _appendToBuffer(String text) {
+    final cur = _ctrl.text.trim();
+    final next = cur.isEmpty ? text : '$cur $text';
+    _ctrl.text = next;
+    _ctrl.selection = TextSelection.collapsed(offset: _ctrl.text.length);
   }
 
   Future<void> _ensureReady() async {
@@ -207,9 +217,21 @@ class _DictationPanelState extends State<DictationPanel> {
   }
 
   Future<void> _toggleMic() async {
+    final tailnet = currentVoiceProvider() == kVoiceProviderTailnet;
     if (_listening) {
-      await _speech.stop();
-      setState(() => _listening = false);
+      if (tailnet) {
+        final text = await TailnetVoice.stopAndTranscribe();
+        if (mounted) setState(() => _listening = false);
+        if (text != null && text.isNotEmpty) _appendToBuffer(text);
+      } else {
+        await _speech.stop();
+        if (mounted) setState(() => _listening = false);
+      }
+      return;
+    }
+    if (tailnet) {
+      final path = await TailnetVoice.startRecording();
+      if (path != null && mounted) setState(() => _listening = true);
       return;
     }
     await _ensureReady();
@@ -218,12 +240,7 @@ class _DictationPanelState extends State<DictationPanel> {
     await _speech.listen(
       onResult: (r) {
         if (r.finalResult && r.recognizedWords.isNotEmpty) {
-          final cur = _ctrl.text.trim();
-          final next =
-              cur.isEmpty ? r.recognizedWords : '$cur ${r.recognizedWords}';
-          _ctrl.text = next;
-          _ctrl.selection =
-              TextSelection.collapsed(offset: _ctrl.text.length);
+          _appendToBuffer(r.recognizedWords);
         }
       },
       listenMode: stt.ListenMode.dictation,

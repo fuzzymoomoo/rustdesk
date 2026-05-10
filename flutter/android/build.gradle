@@ -11,6 +11,21 @@ subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
 subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            try {
+                project.android {
+                    if (compileSdkVersion == null) {
+                        compileSdkVersion 34
+                    }
+                }
+            } catch (Exception ignored) {
+                // plugin already configured; leave it alone
+            }
+        }
+    }
+}
+subprojects {
     project.evaluationDependsOn(':app')
 }
 
