@@ -118,6 +118,86 @@ The thread underneath: today the RustDesk Android app is **a window into the rem
 
 ---
 
+## 4.5 Locked-in decisions (added 2026-05-09 evening)
+
+After spitballing the cockpit shape, these are committed as the build target. Section 5 below remains as the broader exploration; this is the trimmed plan.
+
+### `cha_os` clarified
+
+`cha_os` = **Chaos Operating System**, Warrick's personal ADHD app. It's the first non-Alexandria panel that goes into the dashboard. From the cockpit's point of view it's just another endpoint to embed (WebView or native, depending on what its UI looks like) — the dashboard doesn't care if a panel is Alexandria-internal or personal.
+
+### LOCKED: Dashboard mode + same-session PiP swap
+
+A new top-bar at the top of the mobile RustDesk UI gives three layout modes:
+
+```
+[ Full RD ]   [ Cockpit ]   [ Split (RD as PiP) ]
+```
+
+- **Full RD** — today's view. Toolbar at bottom, RD pixels fill screen. Default.
+- **Cockpit** — dashboard primary; the active panel (Claude, cha_os, worker status, Hades, Hephaestus, Labyrinth) fills the screen. RD becomes a small floating PiP at bottom-right, draggable, pinch-resizable. Tap the PiP to swap back to Full RD instantly.
+- **Split** — 50/50 horizontal split, RD on top, cockpit panel below. Drag divider.
+
+Crucially: **the underlying RD session does not reconnect on mode swap.** The video texture keeps decoding into whatever rect the layout puts it in — Flutter handles that natively. So switching from "controlling Windows" to "checking Claude state with a glance at the PiP" to "back to controlling Windows" is zero-cost — same auth, same decoder, same input pipe.
+
+**Open question** (still): when the dashboard is primary and the RD is a PiP, should the PiP be **interactive** (you can still tap/scroll the remote through it) or **view-only** (glance only, swap to Full RD to interact)? View-only is simpler and matches phone PiP-video conventions; interactive is more powerful but needs gesture-passthrough plumbing.
+
+### LOCKED: Claude cockpit tab via VS Code extension (terminal-scrape + Tailscale)
+
+The Claude tab inside the Cockpit panel is built like this:
+
+**On the laptop:** a small VS Code extension we write (separate repo, `vscode-rustdesk-bridge`) that:
+
+- Spawns or attaches to the integrated terminal where `claude` is running
+- Reads terminal output via VS Code's `Terminal.readEmitter` / `onDidWriteTerminalData` API
+- Regex-matches Claude Code's output patterns: permission prompts, status lines, file-edit confirmations
+- Emits structured events over WebSocket to the tablet (Tailscale-bridged)
+- Accepts inbound HTTP from the tablet:
+  - `POST /claude/respond { value: "1"|"2"|"n" }` → types into the terminal
+  - `POST /claude/prompt { text }` → types prompt + Enter
+  - `POST /vscode/cmd { commandId }` → fires VS Code command palette command
+
+**On the tablet (Cockpit panel → Claude tab):**
+
+- **Permission card** — when the extension reports a permission prompt, the tablet shows it big with `[ Approve ]  [ Allow Always ]  [ Deny ]` buttons (mapped to 1 / 2 / n).
+- **Live output mirror** — last N lines of Claude's terminal, formatted, auto-scroll.
+- **Status badge** — idle / thinking / using-tool / waiting-permission, derived from output patterns.
+- **Dictation panel** — voice → STT → editable buffer → Send → `POST /claude/prompt`. (This subsumes the existing mic button when in Cockpit mode; the buffer makes dictation reviewable instead of fire-and-forget.)
+- **File-edit notices** — when Claude writes, file path + diff line count appears as a transient toast.
+- **Command palette button** — Ctrl+Shift+P equivalent. Fetches palette items from VS Code, shows as a native Flutter sheet picker, fires command on selection.
+
+Why terminal-scrape vs. controlling Claude Code's extension directly: Claude Code's extension exposes very few public commands. Terminal output is the rich state surface. We accept the maintenance cost of keeping regex patterns current as Claude Code evolves; in exchange we never break Claude Code itself, and we get 95% of the cockpit value.
+
+If we ever need Claude's *internal* state (current tool call mid-execution, partial reasoning) — that's a separate project using the Claude Agent SDK, not an extension. Out of scope for this build.
+
+### Same-session continuity
+
+The tablet maintains **one RD connection** to the laptop. Two streams ride that connection:
+
+1. **RustDesk video/input** — existing, unchanged.
+2. **Cockpit WebSocket** — new, talks to the VS Code extension over Tailscale (e.g. `100.85.254.38:cockpit-port`).
+
+Layout-mode swaps re-arrange how those streams are *displayed*. They never disconnect either. So minimising RD into a PiP and viewing the cockpit is the same session as full RD control — exactly the UX you described.
+
+### Reconnect-Allow friction (separate small fix)
+
+Independent of the cockpit work: the "tablet wakes from sleep, reconnects, must click Allow on Windows" friction is solved by RustDesk's own settings, no new code:
+
+1. **Permanent password** in RustDesk Windows host's Security settings → password authenticates the tablet, no Allow click. Solves it.
+2. **Optional security upgrade**: enable RustDesk's built-in TOTP 2FA → scan QR with **Microsoft Authenticator** (or any TOTP app) → on reconnect tablet sends password + you type a 6-digit code from the watch/phone. Replaces "walk to PC, click Allow" with "glance at phone, type 6 digits".
+
+Not a custom feature; just config. Logged here so the dev on the other side doesn't waste time designing for it.
+
+### IDEA (not yet locked): BT-HID "TV remote" panel for Mi Box
+
+Parallel to the cockpit: the tablet pairs with a Xiaomi Mi Box (or any Android TV box) as a regular Bluetooth HID keyboard. A new panel in the dashboard sends BT keycodes (D-pad, Back, Home, media, volume) directly via local BT — no RustDesk session involved.
+
+Architecture: Kotlin Android plugin in this fork wrapping `BluetoothHidDevice` (API 28+), Flutter method channel, panel UI same pattern as the four buttons we already added. ~1 week if we go ahead.
+
+Caveat: not all tablets support `BluetoothHidDevice` profile. Quick test before committing — install "Serverless Bluetooth Keyboard & Mouse" from Play Store, try pairing with the Mi Box. If that works, our build will too.
+
+---
+
 ## 5. How I see these working — technical sketches (NOT a decided plan)
 
 ### The architectural pivot
@@ -209,11 +289,13 @@ Tabs (multi-session) we explicitly parked as too lofty for the current arc.
 
 ## 7. Open questions for the dev on the other side
 
-- **Where do Labyrinth and Hephaestus live?** If they're not yet network-exposed, what does the deployment surface look like? I can sketch the Flutter side from any URL once they have one.
-- **VS Code extension hosting.** Build it as a separate repo (`vscode-rustdesk-bridge`?) or a folder in this fork (`tools/vscode-bridge/`)? My instinct: separate repo, easier life cycle.
-- **Tailscale identity vs auth.** Tailnet membership is reasonable trust for unrolled-out services. Want a token layer on top before any of this leaves the tailnet?
-- **Worker B's role in this.** Happy to keep building on the RustDesk side. The VS Code extension I can bootstrap if you want it on this branch, or you can hand it off.
-- **Tabs (lofty goal).** Still parked, or revisit once layout shell exists?
+- **PiP interactivity** (still open): when the dashboard is primary and the RD is a PiP, interactive (gestures pass through) or view-only (glance only, expand to interact)? My nudge: view-only for v1, simpler.
+- **Where do Labyrinth, Hephaestus, and cha_os live network-wise?** If they're not yet network-exposed, what does the deployment surface look like? I can sketch the Flutter side from any URL once they have one.
+- **VS Code extension repo.** I'm calling it `vscode-rustdesk-bridge` as a separate repo (instinct: easier life cycle). Confirm or override.
+- **Tailscale identity vs auth.** Tailnet membership = trust boundary for v1. Want a token layer on top before any of this leaves the tailnet, or fine as-is?
+- **Worker B's role.** Happy to keep building on the RustDesk side. The VS Code extension I can bootstrap as a fresh repo if you want, or you can hand it off — say which.
+- **BT-HID TV remote.** Worth scoping in (~1 week), or park alongside multi-tabs?
+- **Multi-session tabs (the original lofty goal).** Still parked, or revisit once dashboard layout shell exists?
 
 ---
 
