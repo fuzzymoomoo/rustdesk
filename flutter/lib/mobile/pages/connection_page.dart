@@ -66,7 +66,14 @@ class _ConnectionPageState extends State<ConnectionPage> {
     _idFocusNode.addListener(onFocusChanged);
     if (_idController.text.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
-        final lastRemoteId = await bind.mainGetLastRemoteId();
+        var lastRemoteId = await bind.mainGetLastRemoteId();
+        if (lastRemoteId.isEmpty) {
+          // Operator-default: pre-fill the desktop ID we usually connect
+          // to, so a fresh install doesn't need it typed in. Once the
+          // user actually connects to anything, mainGetLastRemoteId
+          // returns that instead and this fallback is bypassed.
+          lastRemoteId = kDefaultLastRemoteId;
+        }
         if (lastRemoteId != _idController.id) {
           setState(() {
             _idController.id = lastRemoteId;

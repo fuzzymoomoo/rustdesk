@@ -179,6 +179,7 @@ void runMainApp(bool startService) async {
 
 void runMobileApp() async {
   await initEnv(kAppTypeMain);
+  await _seedOperatorDefaults();
   checkUpdate();
   if (isAndroid) androidChannelInit();
   if (isAndroid) platformFFI.syncAndroidServiceAppDirConfigPath();
@@ -187,6 +188,21 @@ void runMobileApp() async {
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
   await initUniLinks();
+}
+
+// Seed operator-tablet defaults — only writes when the underlying
+// option is empty, so a real user override is never clobbered.
+Future<void> _seedOperatorDefaults() async {
+  final rendezvous =
+      await bind.mainGetOption(key: 'custom-rendezvous-server');
+  if (rendezvous.isEmpty) {
+    await bind.mainSetOption(
+        key: 'custom-rendezvous-server', value: kDefaultRendezvousServer);
+  }
+  final key = await bind.mainGetOption(key: 'key');
+  if (key.isEmpty) {
+    await bind.mainSetOption(key: 'key', value: kDefaultRendezvousKey);
+  }
 }
 
 void runMultiWindow(

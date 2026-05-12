@@ -20,6 +20,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../common.dart';
 import '../../consts.dart';
@@ -27,7 +28,7 @@ import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import 'voice_input.dart';
 
-enum CockpitLayout { fullRD, cockpit, split }
+enum CockpitLayout { fullRD, cockpit, split, code }
 
 /// Reactive layout mode shared across the remote page.
 class CockpitState {
@@ -55,6 +56,7 @@ class CockpitModeBar extends StatelessWidget {
                 _btn('Full RD', Icons.fullscreen, CockpitLayout.fullRD, current),
                 _btn('Cockpit', Icons.dashboard, CockpitLayout.cockpit, current),
                 _btn('Split', Icons.splitscreen, CockpitLayout.split, current),
+                _btn('Code', Icons.code, CockpitLayout.code, current),
               ],
             ),
           ),
@@ -88,10 +90,13 @@ class CockpitModeBar extends StatelessWidget {
 
 /// Picks the right body for the current layout mode.
 ///
-/// In Cockpit mode the [rdBody] stays in the tree underneath the cockpit
-/// panel — both keep their state, so swapping modes does not reconnect
-/// the RD session.
-class CockpitLayoutSwitcher extends StatelessWidget {
+/// All sub-trees stay alive across mode swaps so nothing reloads:
+///   - [rdBody] always sits in the Stack (hidden via Offstage when
+///     in Code mode) so the RustDesk session keeps its decoder + auth.
+///   - [CodeTab] is lazily built the first time the user visits Code
+///     mode, then kept in the tree (Offstage when other modes are
+///     active) so the embedded WebView preserves its page state.
+class CockpitLayoutSwitcher extends StatefulWidget {
   final Widget rdBody;
   final SessionID sessionId;
   const CockpitLayoutSwitcher({
@@ -101,31 +106,193 @@ class CockpitLayoutSwitcher extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<CockpitLayoutSwitcher> createState() => _CockpitLayoutSwitcherState();
+}
+
+class _CockpitLayoutSwitcherState extends State<CockpitLayoutSwitcher> {
+  Widget? _codeTab;
+
+  Widget _rdLayout(CockpitLayout mode) {
+    switch (mode) {
+      case CockpitLayout.fullRD:
+      case CockpitLayout.code:
+        return widget.rdBody;
+      case CockpitLayout.cockpit:
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            widget.rdBody,
+            Positioned.fill(
+                child: CockpitPanel(sessionId: widget.sessionId)),
+          ],
+        );
+      case CockpitLayout.split:
+        return Column(
+          children: [
+            Expanded(child: widget.rdBody),
+            Container(height: 1, color: Colors.white24),
+            Expanded(child: CockpitPanel(sessionId: widget.sessionId)),
+          ],
+        );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Obx(() {
       final mode = CockpitState.mode.value;
-      switch (mode) {
-        case CockpitLayout.fullRD:
-          return rdBody;
-        case CockpitLayout.cockpit:
-          // RD continues rendering underneath; cockpit obscures it visually.
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              rdBody,
-              Positioned.fill(child: CockpitPanel(sessionId: sessionId)),
-            ],
-          );
-        case CockpitLayout.split:
-          return Column(
-            children: [
-              Expanded(child: rdBody),
-              Container(height: 1, color: Colors.white24),
-              Expanded(child: CockpitPanel(sessionId: sessionId)),
-            ],
-          );
-      }
+      if (mode == CockpitLayout.code) _codeTab ??= const CodeTab();
+      // RD body can be Offstage when hidden — the FFI session is
+      // independent of widget paint.
+      //
+      // The WebView is different: Android pauses it as soon as the
+      // native view is detached from the window (which Offstage does),
+      // which closes any live WebSocket — fatal for VS Code remote.
+      // So once the Code tab has been built, keep it painted at
+      // opacity 0.001: still invisible to the eye, but the Android
+      // WebView keeps its surface attached and the JS engine + sockets
+      // stay alive.
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Offstage(
+            offstage: mode == CockpitLayout.code,
+            child: _rdLayout(mode),
+          ),
+          if (_codeTab != null)
+            Opacity(
+              opacity: mode == CockpitLayout.code ? 1.0 : 0.001,
+              child: IgnorePointer(
+                ignoring: mode != CockpitLayout.code,
+                child: _codeTab!,
+              ),
+            ),
+        ],
+      );
     });
+  }
+}
+
+/// Code tab — an embedded WebView pointed at a user-configured URL.
+/// The widget is built once and kept alive (via Offstage at the parent
+/// layout switcher) so swapping modes does not reload the page. A small
+/// top bar exposes refresh + edit-URL.
+class CodeTab extends StatefulWidget {
+  const CodeTab({Key? key}) : super(key: key);
+
+  @override
+  State<CodeTab> createState() => _CodeTabState();
+}
+
+class _CodeTabState extends State<CodeTab> {
+  late final WebViewController _controller;
+  String _loadedUrl = '';
+
+  String _savedUrl() {
+    final v = bind.mainGetLocalOption(key: kOptionCodeTabUrl).trim();
+    return v.isEmpty ? kDefaultCodeTabUrl : v;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadedUrl = _savedUrl();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..loadRequest(Uri.parse(_loadedUrl));
+  }
+
+  Future<void> _refresh() async {
+    final saved = _savedUrl();
+    if (saved != _loadedUrl) {
+      _loadedUrl = saved;
+      await _controller.loadRequest(Uri.parse(saved));
+      setState(() {});
+    } else {
+      await _controller.reload();
+    }
+  }
+
+  Future<void> _editUrl() async {
+    final ctrl = TextEditingController(text: _savedUrl());
+    final newUrl = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(translate('Code tab URL')),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(
+            hintText: 'https://example.com/',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(null),
+            child: Text(translate('Cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+            child: Text(translate('OK')),
+          ),
+        ],
+      ),
+    );
+    if (newUrl == null || newUrl.isEmpty) return;
+    await bind.mainSetLocalOption(key: kOptionCodeTabUrl, value: newUrl);
+    _loadedUrl = newUrl;
+    await _controller.loadRequest(Uri.parse(newUrl));
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          height: 36,
+          color: Colors.black87,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.refresh,
+                    color: Colors.white70, size: 18),
+                tooltip: 'Reload',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                onPressed: _refresh,
+              ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: _editUrl,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Text(
+                      _loadedUrl,
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit,
+                    color: Colors.white70, size: 18),
+                tooltip: 'Edit URL',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                onPressed: _editUrl,
+              ),
+            ],
+          ),
+        ),
+        Expanded(child: WebViewWidget(controller: _controller)),
+      ],
+    );
   }
 }
 

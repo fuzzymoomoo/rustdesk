@@ -813,6 +813,44 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       },
     ));
 
+    enhancementsTiles.add(SettingsTile(
+      title: Text(translate('Code tab URL')),
+      leading: const Icon(Icons.code),
+      onPressed: (context) {
+        final ctrl = TextEditingController(
+          text: bind.mainGetLocalOption(key: kOptionCodeTabUrl),
+        );
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(translate('Code tab URL')),
+            content: TextField(
+              controller: ctrl,
+              autofocus: true,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                hintText: kDefaultCodeTabUrl,
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(translate('Cancel')),
+              ),
+              TextButton(
+                onPressed: () async {
+                  await bind.mainSetLocalOption(
+                      key: kOptionCodeTabUrl, value: ctrl.text.trim());
+                  Navigator.of(ctx).pop();
+                },
+                child: Text(translate('OK')),
+              ),
+            ],
+          ),
+        );
+      },
+    ));
+
     enhancementsTiles.add(_getPopupDialogRadioEntry(
       title: 'Keep screen on',
       list: [
