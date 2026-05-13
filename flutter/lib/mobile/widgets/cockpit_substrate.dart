@@ -27,6 +27,8 @@ import '../../consts.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import 'bridge_client.dart';
+import 'command_sheet.dart';
+import 'terminal_mirror.dart';
 import 'voice_input.dart';
 
 enum CockpitLayout { fullRD, cockpit, split, code }
@@ -311,24 +313,41 @@ class CockpitPanel extends StatelessWidget {
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             color: Colors.black54,
             child: Row(
               children: [
+                const SizedBox(width: 4),
                 const Icon(Icons.dashboard, color: Colors.white70, size: 16),
                 const SizedBox(width: 8),
-                Expanded(
+                const Expanded(
                   child: Text(
-                    'Cockpit (substrate — bridge not yet connected)',
-                    style: const TextStyle(
-                        color: Colors.white70, fontSize: 12),
+                    'Cockpit',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
                     overflow: TextOverflow.ellipsis,
                   ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.keyboard_command_key,
+                      color: Colors.white70, size: 18),
+                  tooltip: 'Commands',
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 36, minHeight: 36),
+                  onPressed: () => showCommandSheet(context),
                 ),
               ],
             ),
           ),
-          Expanded(child: DictationPanel(sessionId: sessionId)),
+          Expanded(
+            flex: 1,
+            child: const TerminalMirror(terminalName: 'claude'),
+          ),
+          Container(height: 1, color: Colors.white12),
+          Expanded(
+            flex: 1,
+            child: DictationPanel(sessionId: sessionId),
+          ),
         ],
       ),
     );

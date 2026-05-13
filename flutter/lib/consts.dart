@@ -167,6 +167,12 @@ const String kOptionBridgeToken = "bridge-token";
 // LAN listen address. Token is intentionally NOT baked here; user pastes
 // it once into settings, it's stored in the local options DB after that.
 const String kDefaultBridgeUrl = "http://192.168.0.100:9110";
+const String kOptionTerminalStreamUrl = "terminal-stream-url";
+// Default points at the mockstream stub on msi while W1 builds the real
+// SSE endpoint. Swap to the bridge's /terminal/stream URL once that
+// lands (single line change in settings; no widget code change).
+const String kDefaultTerminalStreamUrl =
+    "http://192.168.0.7:9111/terminal/stream?name=claude";
 const String kOptionI444 = "i444";
 const String kOptionSwapLeftRightMouse = "swap-left-right-mouse";
 const String kOptionCodecPreference = "codec-preference";
