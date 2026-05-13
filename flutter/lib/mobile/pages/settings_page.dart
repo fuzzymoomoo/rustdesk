@@ -814,6 +814,82 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     ));
 
     enhancementsTiles.add(SettingsTile(
+      title: Text(translate('Bridge URL')),
+      leading: const Icon(Icons.hub),
+      onPressed: (context) {
+        final ctrl = TextEditingController(
+          text: bind.mainGetLocalOption(key: kOptionBridgeUrl),
+        );
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(translate('Bridge URL')),
+            content: TextField(
+              controller: ctrl,
+              autofocus: true,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                hintText: kDefaultBridgeUrl,
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(translate('Cancel')),
+              ),
+              TextButton(
+                onPressed: () async {
+                  await bind.mainSetLocalOption(
+                      key: kOptionBridgeUrl, value: ctrl.text.trim());
+                  Navigator.of(ctx).pop();
+                },
+                child: Text(translate('OK')),
+              ),
+            ],
+          ),
+        );
+      },
+    ));
+
+    enhancementsTiles.add(SettingsTile(
+      title: Text(translate('Bridge token')),
+      leading: const Icon(Icons.key),
+      onPressed: (context) {
+        final ctrl = TextEditingController(
+          text: bind.mainGetLocalOption(key: kOptionBridgeToken),
+        );
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(translate('Bridge token')),
+            content: TextField(
+              controller: ctrl,
+              autofocus: true,
+              obscureText: true,
+              decoration: const InputDecoration(
+                hintText: '64-char hex from bridge-token.txt',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(translate('Cancel')),
+              ),
+              TextButton(
+                onPressed: () async {
+                  await bind.mainSetLocalOption(
+                      key: kOptionBridgeToken, value: ctrl.text.trim());
+                  Navigator.of(ctx).pop();
+                },
+                child: Text(translate('OK')),
+              ),
+            ],
+          ),
+        );
+      },
+    ));
+
+    enhancementsTiles.add(SettingsTile(
       title: Text(translate('Code tab URL')),
       leading: const Icon(Icons.code),
       onPressed: (context) {

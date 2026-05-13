@@ -26,6 +26,7 @@ import '../../common.dart';
 import '../../consts.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import 'bridge_client.dart';
 import 'voice_input.dart';
 
 enum CockpitLayout { fullRD, cockpit, split, code }
@@ -415,13 +416,31 @@ class _DictationPanelState extends State<DictationPanel> {
     );
   }
 
-  void _send() {
+  Future<void> _send() async {
     final text = _ctrl.text.trim();
     if (text.isEmpty) return;
-    bind.sessionInputString(sessionId: widget.sessionId, value: text);
     final preview =
         text.length > 40 ? '${text.substring(0, 40)}…' : text;
-    showToast('Sent via RD (bridge fallback): "$preview"');
+
+    if (BridgeClient.isConfigured()) {
+      // Slice 2 happy path: focus the active editor on Mother's laptop
+      // then type the buffer into it via the bridge.
+      final result = await BridgeClient.focusAndSend(text);
+      if (result.ok) {
+        showToast('Sent via bridge: "$preview"');
+        _ctrl.clear();
+        return;
+      }
+      // Surface what went wrong, then fall back to RD so the dictation
+      // isn't lost. Common 409 cause: no editor focused on the laptop.
+      final code = result.statusCode ?? 'no-response';
+      showToast('Bridge $code: ${result.error ?? "unknown"} — falling back to RD');
+    }
+
+    // Pre-bridge fallback (or bridge unreachable / not configured):
+    // route via the existing RustDesk session input pipe.
+    bind.sessionInputString(sessionId: widget.sessionId, value: text);
+    showToast('Sent via RD: "$preview"');
     _ctrl.clear();
   }
 

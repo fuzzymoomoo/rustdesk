@@ -150,9 +150,8 @@ const String kTtsPlaybackBoth = "both";
 // Defaults for Warrick's tailnet voice services. Both endpoints are
 // auth-less — Tailscale ACLs are the trust boundary.
 const String kDefaultSttUrl =
-    "http://fuzzyone.tail4b6af9.ts.net:9000/v1/audio/transcriptions";
-const String kDefaultTtsUrl =
-    "http://fuzzyone.tail4b6af9.ts.net:9100/speak";
+    "http://192.168.0.101:9000/v1/audio/transcriptions";
+const String kDefaultTtsUrl = "http://192.168.0.101:9100/speak";
 const String kOptionCodeTabUrl = "code-tab-url";
 const String kDefaultCodeTabUrl = "https://claude.ai/";
 // Operator-tablet defaults — seeded on first launch if the underlying
@@ -162,6 +161,12 @@ const String kDefaultRendezvousServer = "192.168.0.7";
 const String kDefaultRendezvousKey =
     "I93d8bapZwG9Sn8MalkhrxdZUCqvXnqiFFQiuvyCjgs=";
 const String kDefaultLastRemoteId = "154955647";
+const String kOptionBridgeUrl = "bridge-url";
+const String kOptionBridgeToken = "bridge-token";
+// Default bridge URL — the alexandria-mother-bridge VS Code extension's
+// LAN listen address. Token is intentionally NOT baked here; user pastes
+// it once into settings, it's stored in the local options DB after that.
+const String kDefaultBridgeUrl = "http://192.168.0.100:9110";
 const String kOptionI444 = "i444";
 const String kOptionSwapLeftRightMouse = "swap-left-right-mouse";
 const String kOptionCodecPreference = "codec-preference";
